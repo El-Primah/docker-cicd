@@ -1,0 +1,77 @@
+pipeline {
+    agent any
+
+    environment {
+        REGISTRY_CREDENTIALS = credentials('yc13-oauth') // ID ваших учётных данных для Yandex Registry
+        IMAGE_TAG = "cr.yandex/crp5m63vti4bthbjditk/my-app:v2.${env.BUILD_NUMBER}"
+        INSTANCES = "158.160.91.66" // IP-адреса ваших инстансов через пробел
+    }
+
+    stages {
+        // Этап клонирования репозитория
+        stage('Checkout') {
+            steps {
+                git(
+                    url: 'git@github.com:El-Primah/docker-cicd.git', // SSH-ссылка
+                    branch: 'main',
+                    credentialsId: 'git-ssh' // ID ваших учётных данных
+                )
+            }
+        }
+
+        // Эта стадия отвечает за сборку Docker образа
+        stage('Build') {
+            steps {
+                script {
+                    // Сборка образа
+                    sh "docker build -t ${IMAGE_TAG} ."
+                }
+            }
+        }
+
+        // Эта стадия отвечает за публикацию образа в Yandex Container Registry
+        stage('Push to Yandex Registry') {
+            steps {
+                script {
+                    // Публикация образа
+                    sh "echo ${REGISTRY_CREDENTIALS} | docker login --username oauth --password-stdin cr.yandex"
+                    sh "docker push ${IMAGE_TAG}"
+                }
+            }
+        }
+        
+        // Эта стадия отвечает за деплой на инстансы в Yandex Cloud
+        stage('Deploy to Yandex Cloud') {
+            steps {
+                script {
+                    sshagent(['yc-ssh-wtht-k2']) { // Используем sshagent для доступа к инстансам
+                        def instanceList = INSTANCES.split(' ')
+                        for (instance in instanceList) {
+                            sh """
+                            ssh -o StrictHostKeyChecking=no user1@${instance} '
+                                echo ${REGISTRY_CREDENTIALS} | sudo docker login --username oauth --password-stdin cr.yandex && \
+                                sudo docker pull ${IMAGE_TAG} && \
+                                if sudo docker ps -a | grep my-app; then \
+                                    sudo docker stop my-app && \
+                                    sudo docker rm my-app; \
+                                fi && \
+                                sudo docker run -d -p 80:80 --name my-app ${IMAGE_TAG} && \
+                                sudo docker image prune -a -f && \
+                                exit
+                            '
+                            """
+                        }
+                    }
+                }
+            }
+        }
+
+    }
+    // Очистка рабочего пространства после выполнения
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}
+
