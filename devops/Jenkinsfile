@@ -4,7 +4,7 @@ pipeline {
     environment {
         REGISTRY_CREDENTIALS = credentials('yc13-oauth') // ID ваших учётных данных для Yandex Registry
         IMAGE_TAG = "cr.yandex/crp5m63vti4bthbjditk/my-app:v2.${env.BUILD_NUMBER}"
-        INSTANCES = "158.160.91.66" // IP-адреса ваших инстансов через пробел
+        INSTANCES = "158.160.6.223" // IP-адреса ваших инстансов через пробел
     }
 
     stages {
